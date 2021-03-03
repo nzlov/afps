@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -41,7 +40,7 @@ var ll = &sync.Mutex{}
 func loadConfig() error {
 	ll.Lock()
 	defer ll.Unlock()
-	fmt.Println("loadConfig...")
+	log("loadConfig...")
 	initConfig()
 
 	f, err := os.Open(CFGPATH)
@@ -53,11 +52,11 @@ func loadConfig() error {
 		return err
 	}
 	if fs.ModTime().Unix() == CFGTIME {
-		fmt.Println("loadConfig not changed")
+		log("loadConfig not changed")
 		return nil
 	}
 	CFGTIME = fs.ModTime().Unix()
-	fmt.Println("loadConfiging")
+	log("loadConfiging")
 	M = map[string]PF{}
 
 	r := bufio.NewReader(f)
@@ -73,14 +72,14 @@ func loadConfig() error {
 		if len(ls) != 3 {
 			continue
 		}
-		fmt.Println("loadConfig:", string(l))
+		log("loadConfig:", string(l))
 		M[ls[0]] = PF{
 			idle:     ls[1],
 			touching: ls[2],
 		}
 
 	}
-	fmt.Println("loadConfig ok")
+	log("loadConfig ok")
 	return nil
 }
 
@@ -93,7 +92,7 @@ func main() {
 	c.Stderr = &W{}
 	c.Stdout = &W{}
 	start()
-	fmt.Println(c.Run())
+	log(c.Run())
 }
 
 func start() {
@@ -129,7 +128,7 @@ func upfps(i string) {
 	if FPS == i {
 		return
 	}
-	fmt.Println("upfps:", i)
+	log("upfps:", i)
 	FPS = i
 	exec.Command("settings", "put", "system", "min_refresh_rate", FPS).Output()
 }
@@ -138,7 +137,7 @@ func changeActivity(a string) {
 	if a == ACTIVITY {
 		return
 	}
-	fmt.Println("changeActivity:", a)
+	log("changeActivity:", a)
 	ACTIVITY = a
 	CPF = getPF(a)
 }
