@@ -47,6 +47,7 @@ func loadConfig() error {
 	if err != nil {
 		return err
 	}
+	defer f.Close()
 	fs, err := f.Stat()
 	if err != nil {
 		return err
