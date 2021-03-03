@@ -144,18 +144,22 @@ func changeActivity(a string) {
 }
 
 func getPF(n string) PF {
-	if n == "" {
-		n = "*"
-	}
 	if v, ok := M[n]; ok {
 		return v
 	}
+
 	ns := strings.Index(n, "/")
+
 	if ns > -1 {
 		if v, ok := M[n[:ns]]; ok {
 			return v
 		}
 	}
+
+	if v, ok := M["*"]; ok {
+		return v
+	}
+
 	return PF{"60", "120"}
 }
 
