@@ -2,5 +2,4 @@
 
 package main
 
-func log(s ...interface{}) {
-}
+func log(s ...interface{}) {}

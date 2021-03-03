@@ -9,19 +9,27 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 var (
 	TOUCHING = int64(0)
 	FPS      = "60"
-	LOCK     *sync.Mutex
+	SLOCK    *sync.Mutex
+	FLOCK    *sync.Mutex
 	M        map[string]PF
 	CFGTIME  = int64(0)
 	ACTIVITY = "*"
 	CPF      PF
+	w        *W
+	c        *exec.Cmd
+	t        *time.Ticker
+	Running  bool
 )
 
 const (
+	LEDPATH = "/sys/class/leds/lcd-backlight/brightness"
 	CFGPATH = "/sdcard/afps_nzlov.conf"
 )
 
@@ -85,28 +93,108 @@ func loadConfig() error {
 }
 
 func main() {
+
 	loadConfig()
 	changeActivity("*")
 
-	LOCK = &sync.Mutex{}
-	c := exec.Command("getevent")
-	c.Stderr = &W{}
-	c.Stdout = &W{}
-	start()
-	log(c.Run())
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log(err)
+	}
+	defer watcher.Close()
+
+	go func() {
+		defer func() {
+			log("watcher exit")
+		}()
+		for {
+			log("watcher for")
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				log("event:", event)
+				if event.Op&fsnotify.Write == fsnotify.Write {
+					switch event.Name {
+					case CFGPATH:
+						loadConfig()
+					case LEDPATH:
+						data, _ := os.ReadFile(LEDPATH)
+						log("rled:", string(data[0]))
+						if "0" == string(data[0]) {
+							stop()
+						} else {
+							start()
+						}
+					}
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log("error:", err)
+			}
+		}
+	}()
+
+	err = watcher.Add(LEDPATH)
+	if err != nil {
+		log(err)
+	}
+	err = watcher.Add(CFGPATH)
+	if err != nil {
+		log(err)
+	}
+
+	SLOCK = &sync.Mutex{}
+	FLOCK = &sync.Mutex{}
+	w = &W{}
+
+	select {}
 }
 
 func start() {
+	SLOCK.Lock()
+	defer SLOCK.Unlock()
+	if Running {
+		return
+	}
+	Running = true
+
+	log("start")
+	t = time.NewTicker(time.Second)
 	go func() {
-		t := time.NewTicker(time.Second)
 		for n := range t.C {
-			loadConfig()
 			changeActivity(getActivity())
 			if n.Unix()-TOUCHING > 1 {
 				upfps(CPF.idle)
 			}
 		}
 	}()
+	c = exec.Command("getevent")
+	c.Stderr = w
+	c.Stdout = w
+	c.Start()
+}
+
+func stop() {
+	SLOCK.Lock()
+	defer SLOCK.Unlock()
+
+	if !Running {
+		return
+	}
+	Running = false
+
+	log("stop")
+	if t != nil {
+		t.Stop()
+	}
+	if c != nil {
+		c.Process.Kill()
+	}
+	upfps(CPF.idle)
 }
 
 type PF struct {
@@ -119,13 +207,14 @@ type W struct {
 
 func (w *W) Write(p []byte) (n int, err error) {
 	TOUCHING = time.Now().Unix()
+	log(string(p))
 	upfps(CPF.touching)
 	return len(p), nil
 }
 
 func upfps(i string) {
-	LOCK.Lock()
-	defer LOCK.Unlock()
+	FLOCK.Lock()
+	defer FLOCK.Unlock()
 	if FPS == i {
 		return
 	}
