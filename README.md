@@ -16,3 +16,4 @@ package/activity idlefps touchingfps
 * 配置自动生效，不需要重启
 * 停止触摸1s后更新为`idlefps`
 * GSI类取消强制FPS，官方系统设置为最低刷新率
+* 与其他设置刷新率冲突
