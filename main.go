@@ -3,8 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"fmt"
+	"context"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -122,16 +123,40 @@ func loadconfig(r io.Reader) error {
 func get(host string) []byte {
 	resp, err := http.Get(host)
 	if err != nil {
-		fmt.Println("get host:", host, err)
+		log("get host:", host, err)
 		return []byte{}
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(resp.Body)
-	fmt.Println("get host:", host, ":", string(data))
+	log("get host:", host, ":", string(data))
 	return data
 }
 
 func main() {
+
+	var (
+		dnsResolverIP        = "114.114.114.114:53" // Google DNS resolver.
+		dnsResolverProto     = "udp"                // Protocol to use for the DNS resolver
+		dnsResolverTimeoutMs = 5000                 // Timeout (ms) for the DNS resolver (optional)
+	)
+
+	dialer := &net.Dialer{
+		Resolver: &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: time.Duration(dnsResolverTimeoutMs) * time.Millisecond,
+				}
+				return d.DialContext(ctx, dnsResolverProto, dnsResolverIP)
+			},
+		},
+	}
+
+	dialContext := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialer.DialContext(ctx, network, addr)
+	}
+
+	http.DefaultTransport.(*http.Transport).DialContext = dialContext
 
 	loadConfig()
 	changeActivity("*")

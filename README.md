@@ -6,7 +6,9 @@ CC=$NDK_HOMT/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi
 ```
 
 ## 配置文件`/sdcard/afps_nzlov.conf`
-除了`*`配置，优先级是下面高于上面
+
+优先级是下面高于上面
+
 ```
 @import https://gitee.com/nzlov/afps/raw/main/global.conf // 从线上导入配置, 上游更新并不会自动加载
 package idlefps touchingfps                               // 根据包名配置
