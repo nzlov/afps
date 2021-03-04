@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -36,9 +38,13 @@ const (
 func initConfig() {
 	if _, err := os.Stat(CFGPATH); err != nil {
 		os.WriteFile(CFGPATH, []byte(`# 欢迎使用
+# 具体用法访问 https://gitee.com/nzlov/afps
 # 包名 空闲FPS 触摸FPS
 # tv.danmaku.bili 60 120
 # * 60 60
+
+@import https://gitee.com/nzlov/afps/raw/main/global.conf
+
 * 60 120`), 0644)
 	}
 }
@@ -68,28 +74,61 @@ func loadConfig() error {
 	log("loadConfiging")
 	M = map[string]PF{}
 
-	r := bufio.NewReader(f)
+	if err := loadconfig(f); err != nil {
+		return err
+	}
+
+	log("loadConfig ok")
+	return nil
+}
+
+func loadconfig(r io.Reader) error {
+	b := bufio.NewReader(r)
 	for {
-		l, _, err := r.ReadLine()
+		l, _, err := b.ReadLine()
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			return err
 		}
-		ls := strings.Split(strings.TrimSpace(string(l)), " ")
-		if len(ls) != 3 {
+		ls := strings.TrimSpace(string(l))
+
+		if strings.HasPrefix(ls, "#") {
 			continue
 		}
-		log("loadConfig:", string(l))
-		M[ls[0]] = PF{
-			idle:     ls[1],
-			touching: ls[2],
+
+		if strings.HasPrefix(ls, "@import ") {
+			log("loadConfig import:", string(ls[8:]))
+			g := get(string(ls[8:]))
+			loadconfig(bytes.NewBuffer(g))
+			continue
+		}
+
+		lss := strings.Split(strings.TrimSpace(ls), " ")
+		if len(lss) != 3 {
+			continue
+		}
+		log("loadConfig:", ls)
+		M[lss[0]] = PF{
+			idle:     lss[1],
+			touching: lss[2],
 		}
 
 	}
-	log("loadConfig ok")
 	return nil
+}
+
+func get(host string) []byte {
+	resp, err := http.Get(host)
+	if err != nil {
+		fmt.Println("get host:", host, err)
+		return []byte{}
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	fmt.Println("get host:", host, ":", string(data))
+	return data
 }
 
 func main() {

@@ -6,11 +6,14 @@ CC=$NDK_HOMT/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi
 ```
 
 ## 配置文件`/sdcard/afps_nzlov.conf`
+除了`*`配置，优先级是下面高于上面
 ```
-package idlefps touchingfps
-package/activity idlefps touchingfps
-* idlefps touchingfps
+@import https://gitee.com/nzlov/afps/raw/main/global.conf // 从线上导入配置, 上游更新并不会自动加载
+package idlefps touchingfps                               // 根据包名配置
+package/activity idlefps touchingfps                      // 根据activity配置
+* idlefps touchingfps                                     // 全局
 ```
+
 ### 获取当前`activity`
 ```
 adb -s aqzt8xgmtks49h7t shell "dumpsys activity activities | grep mResumedActivity"
