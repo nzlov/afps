@@ -11,6 +11,10 @@ package idlefps touchingfps
 package/activity idlefps touchingfps
 * idlefps touchingfps
 ```
+### 获取当前`activity`
+```
+adb -s aqzt8xgmtks49h7t shell "dumpsys activity activities | grep mResumedActivity"
+```
 
 ## 注意
 * 配置自动生效，不需要重启
