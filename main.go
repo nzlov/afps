@@ -151,6 +151,8 @@ func main() {
 	FLOCK = &sync.Mutex{}
 	w = &W{}
 
+	start()
+
 	select {}
 }
 
