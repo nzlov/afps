@@ -11,3 +11,8 @@ package idlefps touchingfps
 package/activity idlefps touchingfps
 * idlefps touchingfps
 ```
+
+## 注意
+* 配置自动生效，不需要重启
+* 停止触摸1s后更新为`idlefps`
+* GSI类取消强制FPS，官方系统设置为最低刷新率
