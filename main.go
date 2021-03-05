@@ -17,18 +17,19 @@ import (
 )
 
 var (
-	TOUCHING = int64(0)
-	FPS      = "60"
-	SLOCK    *sync.Mutex
-	FLOCK    *sync.Mutex
-	M        map[string]PF
-	CFGTIME  = int64(0)
-	ACTIVITY = "*"
-	CPF      PF
-	w        *W
-	c        *exec.Cmd
-	t        *time.Ticker
-	Running  bool
+	TOUCHTIME = int64(0)
+	TOUCHING  = false
+	FPS       = "60"
+	SLOCK     *sync.Mutex
+	FLOCK     *sync.Mutex
+	M         map[string]PF
+	CFGTIME   = int64(0)
+	ACTIVITY  = "*"
+	CPF       PF
+	w         *W
+	c         *exec.Cmd
+	t         *time.Ticker
+	Running   bool
 )
 
 const (
@@ -233,8 +234,9 @@ func start() {
 	go func() {
 		for n := range t.C {
 			changeActivity(getActivity())
-			if n.Unix()-TOUCHING > 1 {
+			if n.Unix()-TOUCHTIME > 1 {
 				upfps(CPF.idle)
+				TOUCHING = false
 			}
 		}
 	}()
@@ -272,8 +274,11 @@ type W struct {
 }
 
 func (w *W) Write(p []byte) (n int, err error) {
-	TOUCHING = time.Now().Unix()
-	log(string(p))
+	TOUCHTIME = time.Now().Unix()
+	if TOUCHING {
+		log("tend")
+		return len(p), nil
+	}
 	upfps(CPF.touching)
 	return len(p), nil
 }
@@ -284,8 +289,9 @@ func upfps(i string) {
 	if FPS == i {
 		return
 	}
-	log("upfps:", i)
 	FPS = i
+	TOUCHING = true
+	log("upfps:", i)
 	exec.Command("settings", "put", "system", "min_refresh_rate", FPS).Output()
 }
 
@@ -296,6 +302,9 @@ func changeActivity(a string) {
 	log("changeActivity:", a)
 	ACTIVITY = a
 	CPF = getPF(a)
+	if TOUCHING {
+		upfps(CPF.touching)
+	}
 }
 
 func getPF(n string) PF {
