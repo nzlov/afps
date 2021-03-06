@@ -263,6 +263,7 @@ func stop() {
 		c.Process.Kill()
 	}
 	upfps(CPF.idle)
+	TOUCHING = false
 }
 
 type PF struct {
