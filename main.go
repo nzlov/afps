@@ -294,6 +294,7 @@ func upfps(i string) {
 	TOUCHING = true
 	log("upfps:", i)
 	exec.Command("settings", "put", "system", "min_refresh_rate", FPS).Output()
+	exec.Command("settings", "put", "system", "peak_refresh_rate", FPS).Output()
 }
 
 func changeActivity(a string) {
