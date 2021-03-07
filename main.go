@@ -39,7 +39,15 @@ const (
 
 func initConfig() {
 	if _, err := os.Stat(CFGPATH); err != nil {
-		os.WriteFile(CFGPATH, []byte(`# 欢迎使用
+		f, err := os.Create(CFGPATH)
+		if err != nil {
+			log("initConfig,createConfig", err)
+			time.Sleep(time.Second)
+			initConfig()
+			return
+		}
+		defer f.Close()
+		if _, err = f.Write([]byte(`# 欢迎使用
 # 具体用法访问 https://gitee.com/nzlov/afps
 # 包名 空闲FPS 触摸FPS
 # tv.danmaku.bili 60 120
@@ -47,7 +55,11 @@ func initConfig() {
 
 @import https://gitee.com/nzlov/afps/raw/main/global.conf
 
-* 60 120`), 0644)
+* 60 120`)); err != nil {
+			log("initConfig", err)
+			time.Sleep(time.Second)
+			initConfig()
+		}
 	}
 }
 
