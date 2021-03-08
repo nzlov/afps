@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	TOUCHTIME = int64(0)
+	TOUCHTIME time.Time
 	TOUCHING  = false
 	FPS       = "60"
 	SLOCK     *sync.Mutex
@@ -32,8 +32,10 @@ var (
 	tt        *time.Ticker
 	pt        *time.Ticker
 	Running   bool
-	INTERVAL  = int64(1000)
-	CINTERVAL = int64(1000)
+	INTERVAL  = time.Second
+	CINTERVAL = time.Second
+	MODE      = "def"
+	DONE      chan struct{}
 )
 
 const (
@@ -59,8 +61,11 @@ func initConfig() {
 # * 60 60 1000
 # 没有添加延迟的条目使用*延迟配置，如果*也不存在，默认使用1s
 
-@import https://gitee.com/nzlov/afps/raw/main/global.conf
 # 导入线上配置
+@import https://gitee.com/nzlov/afps/raw/main/global.conf
+
+# 设置模式 def 默认，ci 启用自定义延迟(增加耗电),默认模式下依然会读取*的延迟
+@mode def
 
 * 60 120 1000
 `)); err != nil {
@@ -127,6 +132,17 @@ func loadconfig(r io.Reader) error {
 			continue
 		}
 
+		if strings.HasPrefix(ls, "@mode ") {
+			log("loadConfig mode:", string(ls[6:]))
+			switch strings.TrimSpace(string(ls[6:])) {
+			case "ci":
+				MODE = "ci"
+			default:
+				MODE = "def"
+			}
+			continue
+		}
+
 		lss := strings.Split(strings.TrimSpace(ls), " ")
 		if len(lss) < 3 {
 			continue
@@ -139,14 +155,15 @@ func loadconfig(r io.Reader) error {
 
 		if len(lss) == 4 {
 			v, _ := strconv.ParseInt(lss[3], 10, 64)
-			pf.interval = v
+			pf.interval = time.Duration(v) * time.Millisecond
 		}
 
 		if lss[0] == "*" {
 			if pf.interval < 1 {
-				pf.interval = 1000
+				pf.interval = time.Second
 			}
 			INTERVAL = pf.interval
+			CINTERVAL = INTERVAL
 		}
 
 		M[lss[0]] = pf
@@ -217,7 +234,9 @@ func main() {
 				if event.Op&fsnotify.Write == fsnotify.Write {
 					switch event.Name {
 					case CFGPATH:
+						stop()
 						loadConfig()
+						start()
 					case LEDPATH:
 						data, _ := os.ReadFile(LEDPATH)
 						log("rled:", string(data[0]))
@@ -250,6 +269,11 @@ func main() {
 	FLOCK = &sync.Mutex{}
 	w = &W{}
 
+	tt = time.NewTicker(CINTERVAL)
+	tt.Stop()
+	pt = time.NewTicker(time.Second)
+	pt.Stop()
+
 	start()
 
 	select {}
@@ -262,23 +286,58 @@ func start() {
 		return
 	}
 	Running = true
+	DONE = make(chan struct{})
 
-	log("start")
-	tt = time.NewTicker(getInterval())
-	pt = time.NewTicker(time.Second)
-	go func() {
-		for n := range tt.C {
-			if n.UnixNano()-TOUCHTIME > CINTERVAL {
-				upfps(CPF.idle)
-				TOUCHING = false
+	log("start", MODE, CINTERVAL)
+	switch MODE {
+	case "ci":
+		tt.Reset(CINTERVAL)
+		pt.Reset(time.Second)
+		go func() {
+			defer log("stop tt")
+			for {
+				select {
+				case n := <-tt.C:
+					if n.Sub(TOUCHTIME) > CINTERVAL {
+						upfps(CPF.idle)
+						TOUCHING = false
+					}
+				case <-DONE:
+					return
+				}
 			}
-		}
-	}()
-	go func() {
-		for range pt.C {
-			changeActivity(getActivity())
-		}
-	}()
+		}()
+		go func() {
+			defer log("stop pt")
+			for {
+				select {
+				case <-pt.C:
+					changeActivity(getActivity())
+				case <-DONE:
+					return
+
+				}
+			}
+		}()
+	default:
+		tt.Reset(INTERVAL)
+		go func() {
+			defer log("stop tt")
+			for {
+				select {
+				case n := <-tt.C:
+					if n.Sub(TOUCHTIME) > CINTERVAL {
+						upfps(CPF.idle)
+						TOUCHING = false
+					}
+					changeActivity(getActivity())
+				case <-DONE:
+					return
+				}
+			}
+		}()
+	}
+
 	c = exec.Command("getevent")
 	c.Stderr = w
 	c.Stdout = w
@@ -286,10 +345,10 @@ func start() {
 }
 
 func getInterval() time.Duration {
-	if CPF.interval < 1 {
-		return time.Duration(INTERVAL) * time.Millisecond
+	if CPF.interval < time.Millisecond {
+		return INTERVAL
 	}
-	return time.Duration(CPF.interval) * time.Millisecond
+	return CPF.interval
 }
 
 func stop() {
@@ -300,6 +359,8 @@ func stop() {
 		return
 	}
 	Running = false
+
+	close(DONE)
 
 	log("stop")
 	if tt != nil {
@@ -318,14 +379,14 @@ func stop() {
 type PF struct {
 	idle     string
 	touching string
-	interval int64
+	interval time.Duration
 }
 
 type W struct {
 }
 
 func (w *W) Write(p []byte) (n int, err error) {
-	TOUCHTIME = time.Now().Unix()
+	TOUCHTIME = time.Now()
 	if TOUCHING {
 		return len(p), nil
 	}
@@ -356,7 +417,8 @@ func changeActivity(a string) {
 	if TOUCHING {
 		upfps(CPF.touching)
 	}
-	tt.Reset(getInterval())
+	CINTERVAL = getInterval()
+	tt.Reset(CINTERVAL)
 }
 
 func getPF(n string) PF {
