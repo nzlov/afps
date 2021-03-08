@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,8 +29,11 @@ var (
 	CPF       PF
 	w         *W
 	c         *exec.Cmd
-	t         *time.Ticker
+	tt        *time.Ticker
+	pt        *time.Ticker
 	Running   bool
+	INTERVAL  = int64(1000)
+	CINTERVAL = int64(1000)
 )
 
 const (
@@ -49,13 +53,17 @@ func initConfig() {
 		defer f.Close()
 		if _, err = f.Write([]byte(`# 欢迎使用
 # 具体用法访问 https://gitee.com/nzlov/afps
-# 包名 空闲FPS 触摸FPS
+# 包名 空闲FPS 触摸FPS 延迟(毫秒)
 # tv.danmaku.bili 60 120
-# * 60 60
+# tv.danmaku.bili/.MainActivity2 60 120 200
+# * 60 60 1000
+# 没有添加延迟的条目使用*延迟配置，如果*也不存在，默认使用1s
 
 @import https://gitee.com/nzlov/afps/raw/main/global.conf
+# 导入线上配置
 
-* 60 120`)); err != nil {
+* 60 120 1000
+`)); err != nil {
 			log("initConfig", err)
 			time.Sleep(time.Second)
 			initConfig()
@@ -120,16 +128,30 @@ func loadconfig(r io.Reader) error {
 		}
 
 		lss := strings.Split(strings.TrimSpace(ls), " ")
-		if len(lss) != 3 {
+		if len(lss) < 3 {
 			continue
 		}
 		log("loadConfig:", ls)
-		M[lss[0]] = PF{
+		pf := PF{
 			idle:     lss[1],
 			touching: lss[2],
 		}
 
+		if len(lss) == 4 {
+			v, _ := strconv.ParseInt(lss[3], 10, 64)
+			pf.interval = v
+		}
+
+		if lss[0] == "*" {
+			if pf.interval < 1 {
+				pf.interval = 1000
+			}
+			INTERVAL = pf.interval
+		}
+
+		M[lss[0]] = pf
 	}
+
 	return nil
 }
 
@@ -242,20 +264,32 @@ func start() {
 	Running = true
 
 	log("start")
-	t = time.NewTicker(time.Second)
+	tt = time.NewTicker(getInterval())
+	pt = time.NewTicker(time.Second)
 	go func() {
-		for n := range t.C {
-			changeActivity(getActivity())
-			if n.Unix()-TOUCHTIME > 1 {
+		for n := range tt.C {
+			if n.UnixNano()-TOUCHTIME > CINTERVAL {
 				upfps(CPF.idle)
 				TOUCHING = false
 			}
+		}
+	}()
+	go func() {
+		for range pt.C {
+			changeActivity(getActivity())
 		}
 	}()
 	c = exec.Command("getevent")
 	c.Stderr = w
 	c.Stdout = w
 	c.Start()
+}
+
+func getInterval() time.Duration {
+	if CPF.interval < 1 {
+		return time.Duration(INTERVAL) * time.Millisecond
+	}
+	return time.Duration(CPF.interval) * time.Millisecond
 }
 
 func stop() {
@@ -268,8 +302,11 @@ func stop() {
 	Running = false
 
 	log("stop")
-	if t != nil {
-		t.Stop()
+	if tt != nil {
+		tt.Stop()
+	}
+	if pt != nil {
+		pt.Stop()
 	}
 	if c != nil {
 		c.Process.Kill()
@@ -281,6 +318,7 @@ func stop() {
 type PF struct {
 	idle     string
 	touching string
+	interval int64
 }
 
 type W struct {
@@ -289,7 +327,6 @@ type W struct {
 func (w *W) Write(p []byte) (n int, err error) {
 	TOUCHTIME = time.Now().Unix()
 	if TOUCHING {
-		log("tend")
 		return len(p), nil
 	}
 	upfps(CPF.touching)
@@ -319,6 +356,7 @@ func changeActivity(a string) {
 	if TOUCHING {
 		upfps(CPF.touching)
 	}
+	tt.Reset(getInterval())
 }
 
 func getPF(n string) PF {
@@ -338,7 +376,7 @@ func getPF(n string) PF {
 		return v
 	}
 
-	return PF{"60", "120"}
+	return PF{"60", "120", 1000}
 }
 
 func getActivity() string {
