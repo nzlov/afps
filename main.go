@@ -120,7 +120,7 @@ func loadconfig(r io.Reader) error {
 		}
 
 		lss := strings.Split(strings.TrimSpace(ls), " ")
-		if len(lss) != 3 {
+		if len(lss) < 3 {
 			continue
 		}
 		log("loadConfig:", ls)
