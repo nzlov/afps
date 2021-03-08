@@ -54,7 +54,7 @@ func initConfig() {
 		}
 		defer f.Close()
 		if _, err = f.Write([]byte(`# 欢迎使用
-# 具体用法访问 https://gitee.com/nzlov/afps
+# 具体用法访问 https://github.com/nzlov/afps 或者 https://gitee.com/nzlov/afps
 # 包名 空闲FPS 触摸FPS 延迟(毫秒)
 # tv.danmaku.bili 60 120
 # tv.danmaku.bili/.MainActivity2 60 120 200
