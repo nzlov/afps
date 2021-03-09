@@ -62,7 +62,7 @@ func initConfig() {
 # 没有添加延迟的条目使用*延迟配置，如果*也不存在，默认使用1s
 
 # 导入线上配置
-@import https://gitee.com/nzlov/afps/raw/main/global.conf
+# @import https://gitee.com/nzlov/afps/raw/main/global.conf
 
 # 设置模式 def 默认，ci 启用自定义延迟(增加耗电),默认模式下依然会读取*的延迟
 @mode def
@@ -105,6 +105,9 @@ func loadConfig() error {
 		return err
 	}
 
+	if _, ok := M["*"]; !ok {
+		M["*"] = PF{"60", "60", 1000}
+	}
 	log("loadConfig ok")
 	return nil
 }
@@ -242,7 +245,7 @@ func main() {
 						log("rled:", string(data[0]))
 						if "0" == string(data[0]) {
 							stop()
-						} else {
+						} else if !Running {
 							start()
 						}
 					}
@@ -281,11 +284,13 @@ func main() {
 
 func start() {
 	SLOCK.Lock()
-	defer SLOCK.Unlock()
 	if Running {
+		SLOCK.Unlock()
 		return
 	}
 	Running = true
+	SLOCK.Unlock()
+
 	DONE = make(chan struct{})
 
 	log("start", MODE, CINTERVAL)
@@ -352,13 +357,16 @@ func getInterval() time.Duration {
 }
 
 func stop() {
-	SLOCK.Lock()
-	defer SLOCK.Unlock()
-
 	if !Running {
 		return
 	}
+	SLOCK.Lock()
+	if !Running {
+		SLOCK.Unlock()
+		return
+	}
 	Running = false
+	SLOCK.Unlock()
 
 	close(DONE)
 
@@ -396,11 +404,13 @@ func (w *W) Write(p []byte) (n int, err error) {
 
 func upfps(i string) {
 	FLOCK.Lock()
-	defer FLOCK.Unlock()
 	if FPS == i {
+		FLOCK.Unlock()
 		return
 	}
 	FPS = i
+	FLOCK.Unlock()
+
 	TOUCHING = true
 	log("upfps:", i)
 	exec.Command("settings", "put", "system", "min_refresh_rate", FPS).Output()
