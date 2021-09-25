@@ -64,7 +64,7 @@ func initConfig() {
 # 导入线上配置
 # @import https://gitee.com/nzlov/afps/raw/main/global.conf
 
-# 设置模式 def 默认，ci 启用自定义延迟(增加耗电),默认模式下依然会读取*的延迟
+# 设置模式 def 默认，close 关闭 ci 启用自定义延迟(增加耗电),默认模式下依然会读取*的延迟
 @mode def
 
 * 60 120 1000
@@ -140,6 +140,8 @@ func loadconfig(r io.Reader) error {
 			switch strings.TrimSpace(string(ls[6:])) {
 			case "ci":
 				MODE = "ci"
+			case "close":
+				MODE = "close"
 			default:
 				MODE = "def"
 			}
@@ -285,6 +287,10 @@ func main() {
 func start() {
 	SLOCK.Lock()
 	if Running {
+		SLOCK.Unlock()
+		return
+	}
+	if MODE == "close" {
 		SLOCK.Unlock()
 		return
 	}
